@@ -41,7 +41,7 @@ The bundled fake agent passes normally. The Cause demo enables one declared envi
 `dsh-regression` targets DeepSeek Harness `0.1.0-rc.8`, which is still a developer preview.
 
 ```bash
-dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.1
+dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.2
 ```
 
 Git installs build the TypeScript source through `prepare`. With pnpm 10+, the first install may ask you to allow that build in the profile's `pnpm-workspace.yaml`:
@@ -214,8 +214,8 @@ Later evaluation targets are [OctoBench](https://arxiv.org/abs/2601.10343) for s
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
-  - uses: chenghaoYang/dsh-regression@v0.1.1
+  - uses: actions/checkout@v7
+  - uses: chenghaoYang/dsh-regression@v0.1.2
     with:
       case: .dsh-regression/cases/no-public-api-break.yaml
       label: candidate
@@ -225,9 +225,9 @@ steps:
 
 The action builds this package from the pinned tag and runs the case in the caller checkout. The case's runner determines whether the job needs a DSH Profile or only a local command runner.
 
-## Current v0.1.1 scope
+## Current v0.1.2 scope
 
-v0.1.1 provides explicit capture, live command/DSH runners, detached worktree isolation, deterministic verifiers, comparable-run validation, cooperative cancellation, Markdown/JSON reports, declaration-based Cause minimization, a DSH command entry, a DSH bundle, and GitHub Action execution.
+v0.1.2 provides explicit capture, live command/DSH runners, detached worktree isolation, deterministic verifiers, comparable-run validation, cooperative cancellation, Markdown/JSON reports, declaration-based Cause minimization, a DSH command entry, a DSH bundle, and GitHub Action execution.
 
 ## Development
 

@@ -41,7 +41,7 @@ npx dsh-regression cause \
 `dsh-regression` 的目标基线是仍处于 Developer Preview 的 DeepSeek Harness `0.1.0-rc.8`。
 
 ```bash
-dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.1
+dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.2
 ```
 
 Git 安装会通过 `prepare` 构建 TypeScript。pnpm 10+ 第一次可能要求在 Profile 的 `pnpm-workspace.yaml` 中允许构建：
@@ -214,8 +214,8 @@ Smoke pack 展示了：确定性检查可以检测已知工作区违规，声明
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
-  - uses: chenghaoYang/dsh-regression@v0.1.1
+  - uses: actions/checkout@v7
+  - uses: chenghaoYang/dsh-regression@v0.1.2
     with:
       case: .dsh-regression/cases/no-public-api-break.yaml
       label: candidate
@@ -225,9 +225,9 @@ steps:
 
 Action 会从固定 tag 构建本项目，并在调用方 checkout 中运行 Case。是否需要 DSH Profile 或只需要本地 command runner，由 Case 的 runner 决定。
 
-## 当前 v0.1.1 范围
+## 当前 v0.1.2 范围
 
-v0.1.1 提供显式 capture、Live command/DSH runner、detached worktree 隔离、确定性 verifier、可比运行校验、协作式取消、Markdown/JSON 报告、声明式 Cause 最小化、DSH 命令入口、DSH Bundle 和 GitHub Action 执行。
+v0.1.2 提供显式 capture、Live command/DSH runner、detached worktree 隔离、确定性 verifier、可比运行校验、协作式取消、Markdown/JSON 报告、声明式 Cause 最小化、DSH 命令入口、DSH Bundle 和 GitHub Action 执行。
 
 ## 开发
 
