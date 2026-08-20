@@ -1,0 +1,6 @@
+- insert:
+    - id: dsh-regression
+      name: dsh-regression
+      inject: [commands]
+      config:
+        defaultTrials: 3

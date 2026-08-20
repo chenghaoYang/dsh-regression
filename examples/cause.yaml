@@ -1,0 +1,7 @@
+version: 1
+components:
+  - id: plugin:demo-break-public-api
+    kind: plugin
+    description: Demonstrates a plugin change that makes the agent touch a public file.
+    env:
+      DSH_DEMO_BREAK_API: "1"

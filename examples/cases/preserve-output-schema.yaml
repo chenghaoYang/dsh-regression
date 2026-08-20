@@ -1,0 +1,12 @@
+version: 1
+id: preserve-output-schema
+title: Preserve the machine-readable output contract
+fixture: { repository: ../.., git_ref: HEAD, cwd: examples/fixtures/basic }
+runner: { adapter: command, command: node, args: [fake-agent.mjs], timeout_seconds: 60 }
+task: { prompt: Update the implementation and write the result artifact. }
+run: { trials: 1, pass_policy: all }
+checks:
+  - id: result-schema
+    type: json-schema
+    file: examples/fixtures/basic/artifacts/result.json
+    schema: examples/fixtures/basic/schema/result.schema.json

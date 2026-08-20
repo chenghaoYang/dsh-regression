@@ -1,0 +1,11 @@
+version: 1
+id: no-unasked-dependency
+title: Do not add dependencies unless requested
+fixture: { repository: ../.., git_ref: HEAD, cwd: examples/fixtures/basic }
+runner: { adapter: command, command: node, args: [fake-agent.mjs], timeout_seconds: 60 }
+task: { prompt: Refactor the internal cache without adding dependencies. }
+run: { trials: 1, pass_policy: all }
+checks:
+  - id: dependency-files-untouched
+    type: diff-path
+    forbid_dependency_changes: true

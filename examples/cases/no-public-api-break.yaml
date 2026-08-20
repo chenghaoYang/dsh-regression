@@ -1,0 +1,25 @@
+version: 1
+id: no-public-api-break
+title: Preserve the public API during internal refactoring
+fixture:
+  repository: ../..
+  git_ref: HEAD
+  cwd: examples/fixtures/basic
+runner:
+  adapter: command
+  command: node
+  args: [fake-agent.mjs]
+  timeout_seconds: 60
+task:
+  prompt: Refactor the cache without changing the public API.
+run:
+  trials: 1
+  pass_policy: all
+checks:
+  - id: public-files-untouched
+    type: diff-path
+    forbid: [examples/fixtures/basic/src/public/**]
+  - id: api-surface-stable
+    type: api-snapshot
+    run: node examples/fixtures/basic/api-surface.mjs
+    baseline: examples/fixtures/basic/api-surface.txt

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.dsh-regression/runs/
+coverage/
+*.tgz
+.DS_Store

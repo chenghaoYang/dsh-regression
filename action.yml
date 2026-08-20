@@ -1,0 +1,37 @@
+name: dsh-regression
+description: Run deterministic coding-agent behavior regression cases in isolated Git worktrees.
+branding:
+  icon: check-circle
+  color: blue
+inputs:
+  case:
+    description: Path to the regression case YAML in the caller repository.
+    required: true
+  label:
+    description: Label stored with the run result.
+    required: false
+    default: ci
+  profile:
+    description: Optional DSH profile override.
+    required: false
+  trials:
+    description: Optional number of trials.
+    required: false
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+    - name: Build dsh-regression action package
+      shell: bash
+      run: |
+        npm install --prefix "$GITHUB_ACTION_PATH" --include=dev
+        npm run build --prefix "$GITHUB_ACTION_PATH"
+    - name: Run behavior regression
+      shell: bash
+      run: |
+        args=("${{ inputs.case }}" --label "${{ inputs.label }}")
+        if [[ -n "${{ inputs.profile }}" ]]; then args+=(--profile "${{ inputs.profile }}"); fi
+        if [[ -n "${{ inputs.trials }}" ]]; then args+=(--trials "${{ inputs.trials }}"); fi
+        node "$GITHUB_ACTION_PATH/dist/cli.js" run "${args[@]}"
