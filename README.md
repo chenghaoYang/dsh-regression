@@ -193,12 +193,14 @@ They use a local fake agent so contributors can test without network access or a
 ## GitHub Action
 
 ```yaml
-- uses: chenghaoYang/dsh-regression@v0.1.0
-  with:
-    case: .dsh-regression/cases/no-public-api-break.yaml
-    label: candidate
-    profile: headless
-    trials: 3
+steps:
+  - uses: actions/checkout@v4
+  - uses: chenghaoYang/dsh-regression@v0.1.0
+    with:
+      case: .dsh-regression/cases/no-public-api-break.yaml
+      label: candidate
+      profile: headless
+      trials: 3
 ```
 
 The action builds this package from the pinned tag and runs the case in the caller checkout.

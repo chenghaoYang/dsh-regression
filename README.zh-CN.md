@@ -191,12 +191,14 @@ components:
 ## GitHub Action
 
 ```yaml
-- uses: chenghaoYang/dsh-regression@v0.1.0
-  with:
-    case: .dsh-regression/cases/no-public-api-break.yaml
-    label: candidate
-    profile: headless
-    trials: 3
+steps:
+  - uses: actions/checkout@v4
+  - uses: chenghaoYang/dsh-regression@v0.1.0
+    with:
+      case: .dsh-regression/cases/no-public-api-break.yaml
+      label: candidate
+      profile: headless
+      trials: 3
 ```
 
 Action 会从固定 tag 构建本项目，并在调用方仓库中运行 Case。
