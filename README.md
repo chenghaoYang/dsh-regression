@@ -4,19 +4,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![DeepSeek Harness](https://img.shields.io/badge/DeepSeek-Harness-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 
-**Your coding agent should never make the same mistake twice.**
+**Deterministic workspace regression testing for coding agents.**
 
-Turn an explicit correction into an executable regression test. Run it in isolated Git worktrees. Compare DSH profiles and plugins, then find a 1-minimal harness change that reproduces the failure.
+Turn an explicit correction into an executable case. Run the same task in an isolated Git worktree, compare DSH profiles or runner settings, and report whether the final workspace violates a deterministic contract.
 
 ```text
-Agent changed a forbidden public file
+Agent changes a forbidden public file
 → /regress capture
-→ profile or plugin upgrade
+→ run baseline and candidate
 → regression detected
-→ smallest failure-inducing component set identified
+→ declared environment overlay minimized
 ```
 
-> pytest for agent behavior. git bisect for harness configuration.
+`dsh-regression` is a local CLI with a DSH command entry: `/regress capture`, `/regress run`, `/regress report`, and `/regress cause`.
 
 [简体中文](README.zh-CN.md)
 
@@ -34,14 +34,14 @@ npx dsh-regression cause \
   --trials 1
 ```
 
-The bundled fake agent passes normally. The cause demo enables one component that makes it modify `src/public/`; `dsh-regression` reproduces the failure and confirms that removing that component restores a pass.
+The bundled fake agent passes normally. The Cause demo enables one declared environment overlay that makes it modify `src/public/`, then confirms that removing the overlay restores a pass. These five examples are a **verifier smoke pack**: they exercise the local runner, worktree isolation, deterministic checks, reports, and Cause; they are not a model capability leaderboard.
 
 ## Install as a DeepSeek Harness plugin
 
 `dsh-regression` targets DeepSeek Harness `0.1.0-rc.8`, which is still a developer preview.
 
 ```bash
-dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.0
+dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.1
 ```
 
 Git installs build the TypeScript source through `prepare`. With pnpm 10+, the first install may ask you to allow that build in the profile's `pnpm-workspace.yaml`:
@@ -57,11 +57,12 @@ Inside a DSH conversation, correct the agent explicitly and capture the last two
 
 ```text
 /regress capture preserve-public-api \
+  --allow-path 'src/internal/**' \
   --forbid-path 'src/public/**' \
   --check-command 'pnpm test api-compat'
 ```
 
-The command writes `.dsh-regression/cases/preserve-public-api.yaml`. It never adds an LLM judge. If the correction states a common deterministic rule such as “do not modify public API,” “do not add dependencies,” or “do not delete tests,” the command pre-fills the corresponding verifier; otherwise it asks for an explicit verifier option.
+The command writes `.dsh-regression/cases/preserve-public-api.yaml`. It never adds an LLM judge. Common deterministic rules may be inferred from the correction, but explicit verifier flags are the reliable source of the case contract.
 
 Other DSH commands:
 
@@ -88,6 +89,7 @@ dsh-regression capture \
   --id no-public-api-break \
   --prompt 'Refactor the authentication cache.' \
   --correction 'Do not modify the public API.' \
+  --allow-path 'src/internal/**' \
   --forbid-path 'src/public/**' \
   --check-command 'pnpm test api-compat'
 ```
@@ -123,16 +125,22 @@ checks:
     schema: schema/result.schema.json
 ```
 
-Paths in `fixture.repository` are relative to the case file. Check paths are repository-relative. Every trial resolves `git_ref` to a commit, creates a detached worktree, launches the runner there, runs every verifier, and stores logs plus a patch under `.dsh-regression/runs/`.
+Paths in `fixture.repository` are relative to the case file. Check paths are repository-relative. Every trial resolves `git_ref` to a commit, creates a detached worktree, launches the runner there, runs every verifier, and stores results under `.dsh-regression/runs/`.
 
 ### Deterministic verifiers
 
 - `command`: passes only when the configured command exits `0`.
-- `diff-path`: enforces allow/forbid globs, maximum changed files, dependency-file stability, and test-deletion rules across tracked and untracked files.
-- `json-schema`: validates a JSON artifact against a repository-owned JSON Schema.
-- `api-snapshot`: runs a command and compares its textual API surface with a committed baseline.
+- `diff-path`: enforces allow/forbid globs, maximum changed files, dependency-file stability, and test-deletion rules over tracked and non-ignored untracked paths.
+- `json-schema`: validates a JSON artifact against the configured JSON Schema file.
+- `api-snapshot`: compares command output with the configured text baseline.
 
 The core never calls a second model to judge the first one.
+
+## Observability limits
+
+The v0.1 run result observes the final workspace: changed paths, verifier outcomes, command output, runner stdout/stderr, and a patch artifact. It does not expose a complete agent trajectory or tool-by-tool replay.
+
+`diff-path` follows Git's standard untracked-file view. Files ignored by `.gitignore` are not observed by this verifier. If a path must be checked, make it visible to Git or use a command verifier that checks it directly.
 
 ## Compare runs
 
@@ -155,7 +163,7 @@ No token, cost, or latency number is invented when the runner does not expose it
 
 ## Find the failure-inducing component set
 
-Cause specs declare only components that can be toggled reproducibly. v0.1 uses environment overlays, which can select plugin/profile patch variants in a runner command:
+Cause specs declare the components that can be toggled reproducibly. v0.1 uses declarative environment overlays, which a runner command can map to plugin or Profile patch variants:
 
 ```yaml
 version: 1
@@ -176,11 +184,11 @@ components:
 - `probable`: a reproducible set was found, but at least one reverse check was unstable.
 - `inconclusive`: the endpoints or minimized set were not stable.
 
-“1-minimal” means no single member can be removed while preserving the failure; it is not a claim of mathematical causality or globally minimum cardinality.
+“1-minimal” means no single declared overlay can be removed while preserving the failure. It is not a claim of mathematical causality or globally minimum cardinality.
 
-## Ready-to-run case pack
+## Verifier smoke pack
 
-The repository ships five deterministic cases:
+The repository ships five local fake-agent cases:
 
 - `no-public-api-break`
 - `no-unasked-dependency`
@@ -188,14 +196,26 @@ The repository ships five deterministic cases:
 - `respect-path-boundary`
 - `preserve-output-schema`
 
-They use a local fake agent so contributors can test without network access or an API key. Replace the runner with `adapter: dsh` to apply the same contracts to a real profile.
+They require no network or API key and are intended to smoke-test verifier behavior. Replace the runner with `adapter: dsh` to apply the same contracts to a real Profile.
+
+## Evidence and roadmap
+
+### Current evidence
+
+The smoke pack demonstrates that a known workspace violation can be detected by deterministic checks and that a declared environment overlay can be reduced to a 1-minimal reproducing set. It is evidence for the verifier and reporting path, not a claim about general coding ability.
+
+### Public evaluation route
+
+The first public real evaluation target is [OmniCode's Review Response track](https://github.com/seal-research/OmniCode), whose official dataset and runnable environments cover repository-grounded review-response work across Python, Java, and C++ ([official dataset](https://huggingface.co/datasets/seal-research/OmniCode)). The evaluation should compare the same task under paired DSH configurations and report task success separately from contract violations.
+
+Later evaluation targets are [OctoBench](https://arxiv.org/abs/2601.10343) for scaffold-aware instruction following and [Terminal-Bench](https://www.harborframework.com/docs/tutorials/running-terminal-bench) for terminal and environment behavior. These are evaluation references and pinned external task sets, not part of the local smoke pack.
 
 ## GitHub Action
 
 ```yaml
 steps:
   - uses: actions/checkout@v4
-  - uses: chenghaoYang/dsh-regression@v0.1.0
+  - uses: chenghaoYang/dsh-regression@v0.1.1
     with:
       case: .dsh-regression/cases/no-public-api-break.yaml
       label: candidate
@@ -203,13 +223,11 @@ steps:
       trials: 3
 ```
 
-The action builds this package from the pinned tag and runs the case in the caller checkout.
+The action builds this package from the pinned tag and runs the case in the caller checkout. The case's runner determines whether the job needs a DSH Profile or only a local command runner.
 
-## Scope of v0.1.0
+## Current v0.1.1 scope
 
-Included: explicit capture, live command/DSH runners, isolated worktrees, deterministic verifiers, Markdown/JSON reports, restricted component minimization, a DSH bundle, a CLI, and CI integration.
-
-Not included: automatic correction detection, an LLM judge, Guard Mode, frozen-tool/model replay, arbitrary prompt or tool-schema minimization, cloud storage, a dashboard, or automatic Skill/Memory evolution. DSH does not expose those as finished services today, and this release does not pretend otherwise.
+v0.1.1 provides explicit capture, live command/DSH runners, detached worktree isolation, deterministic verifiers, comparable-run validation, cooperative cancellation, Markdown/JSON reports, declaration-based Cause minimization, a DSH command entry, a DSH bundle, and GitHub Action execution.
 
 ## Development
 

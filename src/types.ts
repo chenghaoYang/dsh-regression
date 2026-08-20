@@ -68,6 +68,15 @@ export interface RegressionCase {
   checks: RegressionCheck[]
 }
 
+/**
+ * The case contract used for comparison. A profile is an execution choice,
+ * so it is recorded in the run manifest rather than making two otherwise
+ * identical cases incomparable.
+ */
+export type CaseDefinition = Omit<RegressionCase, 'runner'> & {
+  runner: Omit<RunnerSpec, 'profile'>
+}
+
 export interface ChangedPath {
   path: string
   status: 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked'
@@ -93,6 +102,8 @@ export interface TrialResult {
     command: string
     exit_code: number | null
     signal: string | null
+    timed_out: boolean
+    aborted: boolean
     stdout: string
     stderr: string
     duration_ms: number
@@ -113,6 +124,7 @@ export interface RunManifest {
   adapter: RunnerSpec['adapter']
   profile?: string
   repository: { path: string; git_ref: string; commit: string }
+  case_definition: CaseDefinition
   components: HarnessComponent[]
   runtime: { platform: NodeJS.Platform; arch: string; node: string }
 }
@@ -147,6 +159,8 @@ export interface CauseProbe {
 export interface CauseResult {
   schema: 1
   case_id: string
+  scope: 'environment-overlays'
+  scope_note: string
   status: 'confirmed' | 'probable' | 'inconclusive'
   minimal_set: HarnessComponent[]
   probes: CauseProbe[]
@@ -157,6 +171,7 @@ export interface RunOptions {
   caseFile: string
   label?: string
   trials?: number
+  signal?: AbortSignal
   profile?: string
   outputRoot?: string
   keepWorktrees?: boolean

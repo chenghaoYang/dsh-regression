@@ -4,6 +4,8 @@ import { loadCase, loadCauseSpec } from './schema.js'
 import { runCase } from './runner.js'
 import type { CauseProbe, CauseResult, HarnessComponent } from './types.js'
 
+export const CAUSE_SCOPE_NOTE = 'Cause minimization evaluates only the user-declared environment overlays; it does not install, uninstall, or verify DSH plugins or profiles.'
+
 function componentEnv(components: HarnessComponent[]): Record<string, string> {
   return Object.assign({}, ...components.map(component => component.env)) as Record<string, string>
 }
@@ -21,6 +23,7 @@ export async function findCause(options: {
   trials?: number
   output?: string
   outputRoot?: string
+  signal?: AbortSignal
 }): Promise<{ result: CauseResult; file: string }> {
   const spec = await loadCauseSpec(options.specFile)
   const regressionCase = await loadCase(options.caseFile)
@@ -33,6 +36,7 @@ export async function findCause(options: {
       ...(options.outputRoot === undefined ? {} : { outputRoot: options.outputRoot }),
       componentEnv: componentEnv(components),
       components,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
     const outcome = result.passed ? 'pass' : result.passed_trials === 0 ? 'fail' : 'inconclusive'
     probes.push({ enabled: components.map(component => component.id), outcome, run_file: file })
@@ -45,7 +49,7 @@ export async function findCause(options: {
   let minimal: HarnessComponent[] = []
   let explanation = ''
   if (good !== 'pass' || bad !== 'fail') {
-    explanation = `baseline was ${good}; full candidate was ${bad}`
+    explanation = `${CAUSE_SCOPE_NOTE} Baseline was ${good}; full candidate was ${bad}.`
   } else {
     minimal = [...spec.components]
     let granularity = 2
@@ -86,18 +90,20 @@ export async function findCause(options: {
     }
     if (finalOutcome === 'fail' && removals.every(removal => removal.outcome === 'pass')) {
       status = 'confirmed'
-      explanation = 'The full candidate fails, the baseline passes, the 1-minimal set reproduces the failure, and removing any member restores a pass.'
+      explanation = `${CAUSE_SCOPE_NOTE} The full candidate fails, the baseline passes, the 1-minimal set reproduces the failure, and removing any member restores a pass.`
     } else if (finalOutcome === 'fail') {
       status = 'probable'
-      explanation = 'A reproducible failure-inducing set was found, but at least one reverse check was not a stable pass.'
+      explanation = `${CAUSE_SCOPE_NOTE} A reproducible failure-inducing set was found, but at least one reverse check was not a stable pass.`
     } else {
       status = 'inconclusive'
-      explanation = 'The minimized set did not reproduce a stable failure.'
+      explanation = `${CAUSE_SCOPE_NOTE} The minimized set did not reproduce a stable failure.`
     }
   }
   const result: CauseResult = {
     schema: 1,
     case_id: regressionCase.id,
+    scope: 'environment-overlays',
+    scope_note: CAUSE_SCOPE_NOTE,
     status,
     minimal_set: minimal,
     probes,

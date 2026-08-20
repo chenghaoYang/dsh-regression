@@ -4,23 +4,23 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![DeepSeek Harness](https://img.shields.io/badge/DeepSeek-Harness-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
 
-**让 Coding Agent 不再重复犯同一种错误。**
+**面向 Coding Agent 的确定性工作区回归测试。**
 
-把一次明确纠错变成可执行的回归测试，在隔离 Git worktree 中重跑，对比 DSH Profile 与插件，并找出能稳定复现失败的 1-minimal Harness 变更集合。
+把一次明确纠错变成可执行 Case，在隔离的 Git worktree 中重跑同一任务，对比 DSH Profile 或 runner 设置，并报告最终工作区是否违反确定性契约。
 
 ```text
 Agent 修改了禁止修改的 public 文件
 → /regress capture
-→ 更新 Profile 或 Plugin
-→ 检测到行为回归
-→ 找到最小失败诱发组件集合
+→ 运行 baseline 和 candidate
+→ 检测到回归
+→ 缩小声明式环境 overlay
 ```
 
-> pytest for agent behavior. git bisect for harness configuration.
+`dsh-regression` 是一个本地 CLI，并提供 DSH 命令入口：`/regress capture`、`/regress run`、`/regress report` 和 `/regress cause`。
 
 [English](README.md)
 
-## 60 秒离线演示——不需要 API Key
+## 60 秒演示——不需要 API Key
 
 ```bash
 git clone https://github.com/chenghaoYang/dsh-regression.git
@@ -34,34 +34,35 @@ npx dsh-regression cause \
   --trials 1
 ```
 
-内置 fake agent 默认通过；Cause 演示会启用一个使它修改 `src/public/` 的组件。`dsh-regression` 会复现失败，并确认移除该组件后恢复通过。
+内置 fake agent 默认通过；Cause 演示启用一个声明式环境 overlay，使它修改 `src/public/`，然后确认移除该 overlay 后恢复通过。这五个示例是 **verifier smoke pack**：用于冒烟验证本地 runner、worktree 隔离、确定性检查、报告和 Cause，不是模型能力排行榜。
 
 ## 作为 DeepSeek Harness 插件安装
 
-当前兼容基线是仍处于 Developer Preview 的 DeepSeek Harness `0.1.0-rc.8`：
+`dsh-regression` 的目标基线是仍处于 Developer Preview 的 DeepSeek Harness `0.1.0-rc.8`。
 
 ```bash
-dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.0
+dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.1
 ```
 
-Git 安装会通过 `prepare` 构建 TypeScript。pnpm 10+ 第一次可能要求在 Profile 的 `pnpm-workspace.yaml` 中明确允许构建：
+Git 安装会通过 `prepare` 构建 TypeScript。pnpm 10+ 第一次可能要求在 Profile 的 `pnpm-workspace.yaml` 中允许构建：
 
 ```yaml
 allowBuilds:
   dsh-regression: true
 ```
 
-重新执行安装命令，然后重启 Profile；Bundle 成员变化只会在 Profile 启动时生效。
+重新执行安装命令，然后重启 Profile。Bundle 成员只会在 Profile 启动时生效。
 
-在 DSH 会话中明确纠正 Agent 后，捕获最近两条人类消息：
+在 DSH 会话中明确纠正 Agent，并捕获最近两条人类消息：
 
 ```text
 /regress capture preserve-public-api \
+  --allow-path 'src/internal/**' \
   --forbid-path 'src/public/**' \
   --check-command 'pnpm test api-compat'
 ```
 
-命令会写入 `.dsh-regression/cases/preserve-public-api.yaml`。核心不使用 LLM Judge。对于“不修改 public API”“不新增依赖”“不删除测试”等常见、可确定验证的纠错，会预填对应 verifier；无法可靠推断时会要求显式提供 verifier。
+命令会写入 `.dsh-regression/cases/preserve-public-api.yaml`。核心不会加入 LLM Judge。常见确定性规则可能从纠错中推断，但显式 verifier 参数才是 Case 契约的可靠来源。
 
 其他 DSH 命令：
 
@@ -81,13 +82,14 @@ dsh-regression report --run RUN.json [--run RUN.json] [--format markdown|json]
 dsh-regression cause --case CASE --spec cause.yml [--trials N]
 ```
 
-捕获示例：
+Capture verifier 参数可重复传入：
 
 ```bash
 dsh-regression capture \
   --id no-public-api-break \
   --prompt '重构认证缓存。' \
   --correction '不要修改 public API。' \
+  --allow-path 'src/internal/**' \
   --forbid-path 'src/public/**' \
   --check-command 'pnpm test api-compat'
 ```
@@ -106,7 +108,7 @@ runner:
   profile: headless
   timeout_seconds: 900
 task:
-  prompt: 重构认证缓存，但不要修改 public API。
+  prompt: Refactor the authentication cache without changing public APIs.
 run:
   trials: 3
   pass_policy: all
@@ -123,18 +125,26 @@ checks:
     schema: schema/result.schema.json
 ```
 
-`fixture.repository` 相对 Case 文件解析；Check 路径均为仓库相对路径。每个 Trial 都先把 `git_ref` 解析为 commit，再创建独立 worktree、启动 runner、运行所有 verifier，并把日志与 patch 保存到 `.dsh-regression/runs/`。
+`fixture.repository` 相对 Case 文件解析；Check 路径均为仓库相对路径。每个 Trial 都先把 `git_ref` 解析为 commit，再创建 detached worktree、启动 runner、运行所有 verifier，并把结果保存到 `.dsh-regression/runs/`。
 
 ### 确定性 Verifier
 
-- `command`：命令退出码为 `0` 才通过。
-- `diff-path`：覆盖 tracked/untracked 文件，支持允许/禁止路径、最大修改文件数、依赖文件不变和禁止删除测试。
-- `json-schema`：用仓库中的 JSON Schema 验证 JSON 产物。
-- `api-snapshot`：执行命令，把文本 API surface 与已提交 baseline 直接比较。
+- `command`：配置命令退出码为 `0` 才通过。
+- `diff-path`：对 tracked 和未被 Git 忽略的 untracked 路径执行允许/禁止 glob、最大修改文件数、依赖文件稳定和禁止删除测试等检查。
+- `json-schema`：使用配置的 JSON Schema 文件验证 JSON 产物。
+- `api-snapshot`：把命令输出与配置的文本 baseline 比较。
 
 核心不会为了评测一个模型再调用另一个模型。
 
+## 可观测性边界
+
+v0.1 的 run 结果观察最终工作区：变更路径、verifier 结果、命令输出、runner stdout/stderr 和 patch 产物。它不会提供完整 Agent 轨迹或逐工具回放。
+
+`diff-path` 遵循 Git 对 untracked 文件的标准视图。被 `.gitignore` 忽略的文件不会被该 verifier 观察；如果某个路径必须被检查，应让它对 Git 可见，或直接使用 command verifier 检查。
+
 ## 对比运行
+
+对同一个 Case 使用两个 Profile 或 runner 设置运行，然后生成 Markdown 或 JSON 报告：
 
 ```bash
 dsh-regression run case.yaml --label baseline --profile standard --trials 3
@@ -153,7 +163,7 @@ Runner 没有提供 token、cost 或 latency 时，报告不会编造数值。
 
 ## 定位失败诱发组件
 
-Cause Spec 只声明能被稳定切换的组件。v0.1 使用环境变量 overlay，可由 runner 命令映射到 Plugin/Profile patch：
+Cause Spec 只声明能被稳定切换的组件。v0.1 使用声明式环境 overlay，由 runner 命令把它映射到 Plugin 或 Profile patch 变体：
 
 ```yaml
 version: 1
@@ -168,17 +178,17 @@ components:
       DSH_MAX_TOOLS: "26"
 ```
 
-`cause` 先确认空 Baseline 稳定通过、完整 Candidate 稳定失败，再运行 Delta Debugging 和反向检查：
+`cause` 会先确认空 Baseline 通过、完整 Candidate 失败，再执行 Delta Debugging 和反向检查。结果使用谨慎措辞：
 
-- `confirmed`：Baseline 通过、Candidate 失败、1-minimal 集合失败，并且移除任一成员后恢复通过。
+- `confirmed`：Baseline 通过、Candidate 失败、1-minimal 集合失败，并且移除每个成员后都恢复通过。
 - `probable`：找到了可复现集合，但至少一个反向检查不稳定。
 - `inconclusive`：端点或最小化结果不稳定。
 
-“1-minimal”只表示无法再单独移除一个成员，不宣称数学因果或全局最小基数。
+“1-minimal”只表示移除任一声明式 overlay 后便无法保持失败，不宣称数学因果或全局最小基数。
 
-## 可直接运行的 Case Pack
+## Verifier smoke pack
 
-仓库内置五个确定性 Case：
+仓库内置五个本地 fake-agent Case：
 
 - `no-public-api-break`
 - `no-unasked-dependency`
@@ -186,14 +196,26 @@ components:
 - `respect-path-boundary`
 - `preserve-output-schema`
 
-它们使用本地 fake agent，贡献者无需网络或 API Key 即可复现。把 runner 改成 `adapter: dsh` 即可把同样的契约应用于真实 Profile。
+它们不需要网络或 API Key，用于冒烟验证 verifier 行为。把 runner 改成 `adapter: dsh`，即可把同样的契约应用到真实 Profile。
+
+## 效果证据与公开评测路线
+
+### 当前效果证据
+
+Smoke pack 展示了：确定性检查可以检测已知工作区违规，声明式环境 overlay 可以被缩小为 1-minimal 复现集合。这是 verifier 和报告链路的证据，不是通用编码能力结论。
+
+### 公开评测路线
+
+首个公开真实评测目标是 [OmniCode 的 Review Response track](https://github.com/seal-research/OmniCode)。它的官方数据集和可运行环境覆盖 Python、Java、C++ 的仓库级 code-review response 任务（[官方数据集](https://huggingface.co/datasets/seal-research/OmniCode)）。评测应在配对的 DSH 配置下运行同一任务，并把任务成功与契约违规分开报告。
+
+后续评测目标是用于 scaffold-aware instruction following 的 [OctoBench](https://arxiv.org/abs/2601.10343)，以及用于终端和环境行为的 [Terminal-Bench](https://www.harborframework.com/docs/tutorials/running-terminal-bench)。它们是评测参考和需要固定版本的外部任务集，不属于本地 smoke pack。
 
 ## GitHub Action
 
 ```yaml
 steps:
   - uses: actions/checkout@v4
-  - uses: chenghaoYang/dsh-regression@v0.1.0
+  - uses: chenghaoYang/dsh-regression@v0.1.1
     with:
       case: .dsh-regression/cases/no-public-api-break.yaml
       label: candidate
@@ -201,13 +223,11 @@ steps:
       trials: 3
 ```
 
-Action 会从固定 tag 构建本项目，并在调用方仓库中运行 Case。
+Action 会从固定 tag 构建本项目，并在调用方 checkout 中运行 Case。是否需要 DSH Profile 或只需要本地 command runner，由 Case 的 runner 决定。
 
-## v0.1.0 范围
+## 当前 v0.1.1 范围
 
-已经包含：显式 capture、Live command/DSH runner、隔离 worktree、确定性 verifier、Markdown/JSON 报告、受限组件最小化、DSH Bundle、独立 CLI 和 CI 集成。
-
-明确不包含：自动识别纠错、LLM Judge、Guard Mode、Frozen-tool/Frozen-model Replay、任意 Prompt/Tool Schema 消融、云服务、Dashboard 和自动 Skill/Memory 演化。DSH 当前没有把这些作为现成服务暴露，本项目也不会假装已经实现。
+v0.1.1 提供显式 capture、Live command/DSH runner、detached worktree 隔离、确定性 verifier、可比运行校验、协作式取消、Markdown/JSON 报告、声明式 Cause 最小化、DSH 命令入口、DSH Bundle 和 GitHub Action 执行。
 
 ## 开发
 

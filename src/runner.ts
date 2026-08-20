@@ -3,11 +3,21 @@ import { dirname, resolve } from 'node:path'
 import { executeAgent } from './adapters/command.js'
 import { changedPaths, createWorktree, diffPatch, gitRoot, removeWorktree, resolveCommit } from './git.js'
 import { loadCase } from './schema.js'
-import type { CheckResult, RunManifest, RunOptions, RunResult, TrialResult } from './types.js'
+import type { CaseDefinition, CheckResult, RegressionCase, RunManifest, RunOptions, RunResult, TrialResult } from './types.js'
 import { snapshotVerifierInputs, verify } from './verifiers/index.js'
 
 function timestamp(): string {
   return new Date().toISOString().replaceAll(':', '').replaceAll('.', '-')
+}
+
+function caseDefinition(regressionCase: RegressionCase): CaseDefinition {
+  const { profile: _profile, ...runner } = regressionCase.runner
+  return { ...regressionCase, runner }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return
+  throw signal.reason instanceof Error ? signal.reason : new Error('run aborted')
 }
 
 export async function runCase(options: RunOptions): Promise<{ result: RunResult; file: string }> {
@@ -30,58 +40,77 @@ export async function runCase(options: RunOptions): Promise<{ result: RunResult;
       ? {}
       : { profile: (options.profile ?? regressionCase.runner.profile)! }),
     repository: { path: repository, git_ref: regressionCase.fixture.git_ref, commit },
+    case_definition: caseDefinition(regressionCase),
     components: options.components ?? [],
     runtime: { platform: process.platform, arch: process.arch, node: process.version },
   }
   const trialResults: TrialResult[] = []
   for (let trial = 1; trial <= trials; trial += 1) {
+    throwIfAborted(options.signal)
     const started = Date.now()
     const trialStarted = new Date().toISOString()
     const worktree = await createWorktree(repository, commit, `${regressionCase.id}-${trial}`)
-    const trialDir = resolve(outputDir, `trial-${trial}`)
-    await mkdir(trialDir, { recursive: true })
-    const verifierSnapshots = await snapshotVerifierInputs(regressionCase.checks, worktree.path)
-    const executor = await executeAgent(regressionCase, worktree.path, options.profile, options.componentEnv)
-    const changed = await changedPaths(worktree.path)
-    const checkResults: CheckResult[] = []
-    if (executor.exitCode !== 0) {
-      checkResults.push({
-        id: 'runner',
-        type: 'runner',
-        passed: false,
-        message: `agent runner failed (${executor.exitCode ?? executor.signal})`,
-      })
+    try {
+      const trialDir = resolve(outputDir, `trial-${trial}`)
+      await mkdir(trialDir, { recursive: true })
+      const verifierSnapshots = await snapshotVerifierInputs(regressionCase.checks, worktree.path)
+      const executor = await executeAgent(
+        regressionCase,
+        worktree.path,
+        options.profile,
+        options.componentEnv,
+        options.signal,
+      )
+      const changed = await changedPaths(worktree.path, worktree.commit)
+      const checkResults: CheckResult[] = []
+      if (executor.exitCode !== 0 || executor.timedOut || executor.aborted) {
+        const reason = executor.timedOut
+          ? 'timed out'
+          : executor.aborted
+            ? 'aborted'
+            : `failed (${executor.exitCode ?? executor.signal})`
+        checkResults.push({
+          id: 'runner',
+          type: 'runner',
+          passed: false,
+          message: `agent runner ${reason}`,
+        })
+      }
+      for (const check of regressionCase.checks) {
+        checkResults.push(await verify(check, worktree.path, changed, verifierSnapshots, options.signal))
+      }
+      const patch = await diffPatch(worktree.path, worktree.commit)
+      await Promise.all([
+        writeFile(resolve(trialDir, 'stdout.log'), executor.stdout),
+        writeFile(resolve(trialDir, 'stderr.log'), executor.stderr),
+        writeFile(resolve(trialDir, 'changes.patch'), patch),
+      ])
+      const result: TrialResult = {
+        trial,
+        passed: checkResults.every(check => check.passed),
+        worktree: worktree.path,
+        commit: worktree.commit,
+        started_at: trialStarted,
+        duration_ms: Date.now() - started,
+        executor: {
+          command: executor.command,
+          exit_code: executor.exitCode,
+          signal: executor.signal,
+          timed_out: executor.timedOut,
+          aborted: executor.aborted,
+          stdout: resolve(trialDir, 'stdout.log'),
+          stderr: resolve(trialDir, 'stderr.log'),
+          duration_ms: executor.durationMs,
+        },
+        changed_paths: changed,
+        checks: checkResults,
+      }
+      trialResults.push(result)
+      await writeFile(resolve(trialDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`)
+      throwIfAborted(options.signal)
+    } finally {
+      if (options.keepWorktrees !== true) await removeWorktree(repository, worktree.path)
     }
-    for (const check of regressionCase.checks) {
-      checkResults.push(await verify(check, worktree.path, changed, verifierSnapshots))
-    }
-    const patch = await diffPatch(worktree.path)
-    await Promise.all([
-      writeFile(resolve(trialDir, 'stdout.log'), executor.stdout),
-      writeFile(resolve(trialDir, 'stderr.log'), executor.stderr),
-      writeFile(resolve(trialDir, 'changes.patch'), patch),
-    ])
-    const result: TrialResult = {
-      trial,
-      passed: checkResults.every(check => check.passed),
-      worktree: worktree.path,
-      commit: worktree.commit,
-      started_at: trialStarted,
-      duration_ms: Date.now() - started,
-      executor: {
-        command: executor.command,
-        exit_code: executor.exitCode,
-        signal: executor.signal,
-        stdout: resolve(trialDir, 'stdout.log'),
-        stderr: resolve(trialDir, 'stderr.log'),
-        duration_ms: executor.durationMs,
-      },
-      changed_paths: changed,
-      checks: checkResults,
-    }
-    trialResults.push(result)
-    await writeFile(resolve(trialDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`)
-    if (options.keepWorktrees !== true) await removeWorktree(repository, worktree.path)
   }
   const passedTrials = trialResults.filter(trial => trial.passed).length
   const result: RunResult = {

@@ -38,12 +38,13 @@ export async function verify(
   worktree: string,
   changed: ChangedPath[],
   snapshots?: VerifierSnapshots,
+  signal?: AbortSignal,
 ): Promise<CheckResult> {
   const snapshot = snapshots?.get(snapshotKey(check))
   switch (check.type) {
-    case 'command': return verifyCommand(check, worktree)
+    case 'command': return verifyCommand(check, worktree, signal)
     case 'diff-path': return verifyDiffPath(check, changed)
     case 'json-schema': return verifyJsonSchema(check, worktree, snapshot)
-    case 'api-snapshot': return verifyApiSnapshot(check, worktree, snapshot)
+    case 'api-snapshot': return verifyApiSnapshot(check, worktree, snapshot, signal)
   }
 }

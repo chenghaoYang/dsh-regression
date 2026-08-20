@@ -31,8 +31,8 @@ export async function removeWorktree(repository: string, path: string): Promise<
   await rm(dirname(path), { recursive: true, force: true })
 }
 
-export async function diffPatch(worktree: string): Promise<string> {
-  const tracked = await git(['diff', '--binary', 'HEAD'], worktree)
+export async function diffPatch(worktree: string, initialCommit: string): Promise<string> {
+  const tracked = await git(['diff', '--binary', initialCommit], worktree)
   const untracked = (await git(['ls-files', '--others', '--exclude-standard'], worktree))
     .split('\n').filter(Boolean)
   return tracked + (untracked.length === 0 ? '' : `\nUntracked files:\n${untracked.join('\n')}\n`)
@@ -44,8 +44,9 @@ function parseNameStatus(raw: string): ChangedPath[] {
   for (let index = 0; index < parts.length;) {
     const status = parts[index++] ?? ''
     if (status.startsWith('R')) {
-      index += 1
+      const source = parts[index++]
       const target = parts[index++]
+      if (source !== undefined) changed.push({ path: source, status: 'deleted' })
       if (target !== undefined) changed.push({ path: target, status: 'renamed' })
       continue
     }
@@ -59,8 +60,8 @@ function parseNameStatus(raw: string): ChangedPath[] {
   return changed
 }
 
-export async function changedPaths(worktree: string): Promise<ChangedPath[]> {
-  const tracked = parseNameStatus(await git(['diff', '--name-status', '-z', 'HEAD'], worktree))
+export async function changedPaths(worktree: string, initialCommit: string): Promise<ChangedPath[]> {
+  const tracked = parseNameStatus(await git(['diff', '--find-renames', '--name-status', '-z', initialCommit], worktree))
   const untracked = (await git(['ls-files', '--others', '--exclude-standard', '-z'], worktree))
     .split('\0').filter(Boolean).map(path => ({ path, status: 'untracked' as const }))
   return [...tracked, ...untracked].sort((a, b) => a.path.localeCompare(b.path))

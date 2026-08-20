@@ -11,6 +11,7 @@ export async function verifyApiSnapshot(
   check: ApiSnapshotCheck,
   worktree: string,
   baselineSnapshot?: { content?: string; error?: string },
+  signal?: AbortSignal,
 ): Promise<CheckResult> {
   if (baselineSnapshot?.error !== undefined) {
     return { id: check.id, type: check.type, passed: false, message: baselineSnapshot.error }
@@ -25,15 +26,33 @@ export async function verifyApiSnapshot(
       return { id: check.id, type: check.type, passed: false, message: `API baseline became unreadable: ${error instanceof Error ? error.message : String(error)}` }
     }
   }
-  const result = await runShell(check.run, resolve(worktree, check.cwd ?? '.'), (check.timeout_seconds ?? 300) * 1000)
-  if (result.exitCode !== 0) {
+  const result = await runShell(
+    check.run,
+    resolve(worktree, check.cwd ?? '.'),
+    (check.timeout_seconds ?? 300) * 1000,
+    undefined,
+    signal,
+  )
+  if (result.timedOut || result.aborted || result.exitCode !== 0 || result.signal !== null) {
+    const reason = result.timedOut
+      ? 'timed out'
+      : result.aborted
+        ? 'aborted'
+        : `failed (${result.exitCode ?? result.signal})`
     return {
       id: check.id,
       type: check.type,
       passed: false,
-      message: `API snapshot command failed (${result.exitCode ?? result.signal}): ${check.run}`,
+      message: `API snapshot command ${reason}: ${check.run}`,
       duration_ms: result.durationMs,
-      details: { stdout: result.stdout, stderr: result.stderr },
+      details: {
+        exit_code: result.exitCode,
+        signal: result.signal,
+        timed_out: result.timedOut,
+        aborted: result.aborted,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      },
     }
   }
   try {

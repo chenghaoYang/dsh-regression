@@ -14,6 +14,7 @@ export async function executeAgent(
   worktree: string,
   profileOverride?: string,
   componentEnv?: Record<string, string>,
+  signal?: AbortSignal,
 ) {
   const runner: RunnerSpec = regressionCase.runner
   const profile = profileOverride ?? runner.profile ?? 'headless'
@@ -29,5 +30,6 @@ export async function executeAgent(
       DSH_REGRESSION_CASE_ID: regressionCase.id,
       DSH_REGRESSION_WORKTREE: worktree,
     },
+    ...(signal === undefined ? {} : { signal }),
   })
 }

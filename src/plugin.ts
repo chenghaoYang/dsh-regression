@@ -55,7 +55,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     name: 'regress',
     description: 'Capture, run, report, and minimize coding-agent behavior regressions',
     input: { hint: 'capture|run|report|cause …' },
-    handler: async ({ agent, rawInput }) => {
+    handler: async ({ agent, rawInput, signal }) => {
       try {
         const words = shellWords(rawInput)
         const action = words[0]
@@ -100,6 +100,7 @@ export function apply(ctx: Context, config: Config = {}): void {
             ...(trials === undefined ? {} : { trials }),
             outputRoot: resolve(config.runsDir ?? resolve(cwd, '.dsh-regression', 'runs')),
             keepWorktrees: args.flags.has('keep-worktrees'),
+            signal,
           })
           return {
             kind: run.result.passed ? 'success' : 'error',
@@ -120,6 +121,7 @@ export function apply(ctx: Context, config: Config = {}): void {
             specFile: resolve(cwd, specFile),
             trials: integer(args, 'trials') ?? config.defaultTrials ?? 3,
             outputRoot: resolve(config.runsDir ?? resolve(cwd, '.dsh-regression', 'runs')),
+            signal,
           })
           const ids = cause.result.minimal_set.map(component => component.id).join(', ') || '(none)'
           return {

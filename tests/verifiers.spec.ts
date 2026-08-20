@@ -30,4 +30,22 @@ describe('deterministic verifiers', () => {
     const result = await verifyJsonSchema({ id: 'schema', type: 'json-schema', file: 'artifacts/result.json', schema: 'schema.json' }, root)
     expect(result.passed).toBe(true)
   })
+
+  it('recognizes common dependency and test naming conventions', () => {
+    const changed = [
+      { path: 'requirements-dev.txt', status: 'modified' as const },
+      { path: 'Gemfile.lock', status: 'modified' as const },
+      { path: 'src/cache_test.go', status: 'deleted' as const },
+      { path: 'src/TestApi.java', status: 'deleted' as const },
+    ]
+    const result = verifyDiffPath({
+      id: 'portable-boundaries', type: 'diff-path',
+      forbid_dependency_changes: true, forbid_test_deletions: true,
+    }, changed)
+    expect(result.passed).toBe(false)
+    expect(result.message).toContain('requirements-dev.txt')
+    expect(result.message).toContain('Gemfile.lock')
+    expect(result.message).toContain('src/cache_test.go')
+    expect(result.message).toContain('src/TestApi.java')
+  })
 })
