@@ -7,7 +7,24 @@ function normalize(text: string): string {
   return text.replaceAll('\r\n', '\n').trimEnd()
 }
 
-export async function verifyApiSnapshot(check: ApiSnapshotCheck, worktree: string): Promise<CheckResult> {
+export async function verifyApiSnapshot(
+  check: ApiSnapshotCheck,
+  worktree: string,
+  baselineSnapshot?: { content?: string; error?: string },
+): Promise<CheckResult> {
+  if (baselineSnapshot?.error !== undefined) {
+    return { id: check.id, type: check.type, passed: false, message: baselineSnapshot.error }
+  }
+  if (baselineSnapshot?.content !== undefined) {
+    try {
+      const current = await readFile(resolve(worktree, check.baseline), 'utf8')
+      if (current !== baselineSnapshot.content) {
+        return { id: check.id, type: check.type, passed: false, message: `API baseline changed during the trial: ${check.baseline}` }
+      }
+    } catch (error) {
+      return { id: check.id, type: check.type, passed: false, message: `API baseline became unreadable: ${error instanceof Error ? error.message : String(error)}` }
+    }
+  }
   const result = await runShell(check.run, resolve(worktree, check.cwd ?? '.'), (check.timeout_seconds ?? 300) * 1000)
   if (result.exitCode !== 0) {
     return {
@@ -20,7 +37,7 @@ export async function verifyApiSnapshot(check: ApiSnapshotCheck, worktree: strin
     }
   }
   try {
-    const expected = normalize(await readFile(resolve(worktree, check.baseline), 'utf8'))
+    const expected = normalize(baselineSnapshot?.content ?? await readFile(resolve(worktree, check.baseline), 'utf8'))
     const actual = normalize(result.stdout)
     return {
       id: check.id,

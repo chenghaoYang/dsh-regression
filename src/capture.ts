@@ -64,8 +64,8 @@ export async function captureCase(options: CaptureOptions): Promise<{ regression
   if ((options.forbidPaths?.length ?? 0) > 0 || (options.allowPaths?.length ?? 0) > 0) {
     checks.push({
       id: 'path-boundary', type: 'diff-path',
-      ...(options.allowPaths === undefined ? {} : { allow: options.allowPaths }),
-      ...(options.forbidPaths === undefined ? {} : { forbid: options.forbidPaths }),
+      ...((options.allowPaths?.length ?? 0) === 0 ? {} : { allow: options.allowPaths }),
+      ...((options.forbidPaths?.length ?? 0) === 0 ? {} : { forbid: options.forbidPaths }),
     })
   }
   for (const [index, command] of (options.commands ?? []).entries()) {

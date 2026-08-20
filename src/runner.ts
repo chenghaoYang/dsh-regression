@@ -4,7 +4,7 @@ import { executeAgent } from './adapters/command.js'
 import { changedPaths, createWorktree, diffPatch, gitRoot, removeWorktree, resolveCommit } from './git.js'
 import { loadCase } from './schema.js'
 import type { CheckResult, RunManifest, RunOptions, RunResult, TrialResult } from './types.js'
-import { verify } from './verifiers/index.js'
+import { snapshotVerifierInputs, verify } from './verifiers/index.js'
 
 function timestamp(): string {
   return new Date().toISOString().replaceAll(':', '').replaceAll('.', '-')
@@ -40,6 +40,7 @@ export async function runCase(options: RunOptions): Promise<{ result: RunResult;
     const worktree = await createWorktree(repository, commit, `${regressionCase.id}-${trial}`)
     const trialDir = resolve(outputDir, `trial-${trial}`)
     await mkdir(trialDir, { recursive: true })
+    const verifierSnapshots = await snapshotVerifierInputs(regressionCase.checks, worktree.path)
     const executor = await executeAgent(regressionCase, worktree.path, options.profile, options.componentEnv)
     const changed = await changedPaths(worktree.path)
     const checkResults: CheckResult[] = []
@@ -51,7 +52,9 @@ export async function runCase(options: RunOptions): Promise<{ result: RunResult;
         message: `agent runner failed (${executor.exitCode ?? executor.signal})`,
       })
     }
-    for (const check of regressionCase.checks) checkResults.push(await verify(check, worktree.path, changed))
+    for (const check of regressionCase.checks) {
+      checkResults.push(await verify(check, worktree.path, changed, verifierSnapshots))
+    }
     const patch = await diffPatch(worktree.path)
     await Promise.all([
       writeFile(resolve(trialDir, 'stdout.log'), executor.stdout),
