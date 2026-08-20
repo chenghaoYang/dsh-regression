@@ -41,7 +41,7 @@ The bundled fake agent passes normally. The Cause demo enables one declared envi
 `dsh-regression` targets DeepSeek Harness `0.1.0-rc.8`, which is still a developer preview.
 
 ```bash
-dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.2
+dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.3
 ```
 
 Git installs build the TypeScript source through `prepare`. With pnpm 10+, the first install may ask you to allow that build in the profile's `pnpm-workspace.yaml`:
@@ -93,6 +93,32 @@ dsh-regression capture \
   --forbid-path 'src/public/**' \
   --check-command 'pnpm test api-compat'
 ```
+
+## Real Kimi K2.7 Code smoke test
+
+The repository includes a real-agent case at `examples/cases/kimi-internal-edit.yaml`. It asks DSH to change exactly one internal fixture file and verifies both the final content and the one-file path boundary.
+
+For a Kimi Code Console key, merge `examples/kimi/settings.yaml.example` into the `settings.yaml` of a dedicated DSH home or profile. The important values are:
+
+```text
+DSH catalog route: kimi-coding
+model ID: kimi-for-coding
+credential reference: KIMI_API_KEY
+```
+
+The route uses the Kimi Code endpoint and protocol metadata bundled with DSH's pi-ai catalog. Inject the credential only through the process environment, explicitly select the dedicated DSH home, then run:
+
+```bash
+export DSH_HOME='/path/to/dedicated/dsh-home'
+export KIMI_API_KEY='<set outside the repository>'
+
+npx dsh-regression run examples/cases/kimi-internal-edit.yaml \
+  --profile headless \
+  --label kimi-smoke \
+  --trials 1
+```
+
+For a baseline/candidate check, run the same case against two Profiles using the same Kimi model and API account, then pass both `run.json` files to `report`. Do not place the key in the case, `runner.env`, Cause components, committed settings, or uploaded run artifacts. Kimi Open Platform keys use a different endpoint and model ID; do not mix the two credential types.
 
 ## Case format
 
@@ -202,7 +228,9 @@ They require no network or API key and are intended to smoke-test verifier behav
 
 ### Current evidence
 
-The smoke pack demonstrates that a known workspace violation can be detected by deterministic checks and that a declared environment overlay can be reduced to a 1-minimal reproducing set. It is evidence for the verifier and reporting path, not a claim about general coding ability.
+The smoke pack demonstrates that a known workspace violation can be detected by deterministic checks and that a declared environment overlay can be reduced to a 1-minimal reproducing set.
+
+On 2026-08-20, `kimi-internal-edit` was run through real DSH headless Profiles backed by Kimi K2.7 Code (`kimi-for-coding`), including the built-in `kimi-coding` catalog route. The isolated episodes changed exactly `examples/fixtures/basic/src/internal/cache.txt` and passed the path and content checks. One episode encountered a transient provider `RATE_LIMIT`; DSH retried it and the trial still completed successfully. This is real provider/agent wiring evidence, not a general model-quality benchmark.
 
 ### Public evaluation route
 
@@ -215,7 +243,7 @@ Later evaluation targets are [OctoBench](https://arxiv.org/abs/2601.10343) for s
 ```yaml
 steps:
   - uses: actions/checkout@v7
-  - uses: chenghaoYang/dsh-regression@v0.1.2
+  - uses: chenghaoYang/dsh-regression@v0.1.3
     with:
       case: .dsh-regression/cases/no-public-api-break.yaml
       label: candidate
@@ -225,9 +253,9 @@ steps:
 
 The action builds this package from the pinned tag and runs the case in the caller checkout. The case's runner determines whether the job needs a DSH Profile or only a local command runner.
 
-## Current v0.1.2 scope
+## Current v0.1.3 scope
 
-v0.1.2 provides explicit capture, live command/DSH runners, detached worktree isolation, deterministic verifiers, comparable-run validation, cooperative cancellation, Markdown/JSON reports, declaration-based Cause minimization, a DSH command entry, a DSH bundle, and GitHub Action execution.
+v0.1.3 provides explicit capture, live command/DSH runners, detached worktree isolation, deterministic verifiers, comparable-run validation, cooperative cancellation, Markdown/JSON reports, declaration-based Cause minimization, a DSH command entry, a DSH bundle, GitHub Action execution, and a credential-safe Kimi K2.7 Code example.
 
 ## Development
 

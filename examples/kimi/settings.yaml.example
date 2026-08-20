@@ -1,0 +1,8 @@
+llm-pi-ai:
+  providers:
+    kimi-coding:
+      apiKeyEnv: KIMI_API_KEY
+
+agent-default-model:
+  provider: kimi-coding
+  model: kimi-for-coding

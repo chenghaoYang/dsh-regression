@@ -1,6 +1,9 @@
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import YAML from 'yaml'
 import { describe, expect, it } from 'vitest'
 import { inferChecks } from '../src/capture.js'
-import { parseCase } from '../src/schema.js'
+import { loadCase, parseCase } from '../src/schema.js'
 
 describe('case schema', () => {
   it('accepts a minimal executable case', () => {
@@ -34,5 +37,22 @@ describe('case schema', () => {
       forbid_test_deletions: true,
       forbid: expect.arrayContaining(['src/public/**']),
     })])
+  })
+
+  it('ships a parseable Kimi case and an environment-only credential reference', async () => {
+    const kimiCase = await loadCase(resolve('examples/cases/kimi-internal-edit.yaml'))
+    expect(kimiCase.runner.adapter).toBe('dsh')
+    expect(kimiCase.checks.map(check => check.id)).toEqual(['internal-file-only', 'exact-content'])
+
+    const settingsText = await readFile(resolve('examples/kimi/settings.yaml.example'), 'utf8')
+    const settings = YAML.parse(settingsText) as {
+      'llm-pi-ai': { providers: { 'kimi-coding': { apiKeyEnv: string } } }
+      'agent-default-model': { provider: string; model: string }
+    }
+    expect(settings).toMatchObject({
+      'llm-pi-ai': { providers: { 'kimi-coding': { apiKeyEnv: 'KIMI_API_KEY' } } },
+      'agent-default-model': { provider: 'kimi-coding', model: 'kimi-for-coding' },
+    })
+    expect(settingsText).not.toMatch(/^\s*apiKey:/mu)
   })
 })

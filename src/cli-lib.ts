@@ -6,7 +6,7 @@ import { findCause } from './cause.js'
 import { writeReport } from './report.js'
 import { runCase } from './runner.js'
 
-export const help = `dsh-regression 0.1.2
+export const help = `dsh-regression 0.1.3
 
 Usage:
   dsh-regression capture --id ID --prompt TEXT [verifier options]

@@ -41,7 +41,7 @@ npx dsh-regression cause \
 `dsh-regression` 的目标基线是仍处于 Developer Preview 的 DeepSeek Harness `0.1.0-rc.8`。
 
 ```bash
-dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.2
+dsh plugin --profile web add github:chenghaoYang/dsh-regression#v0.1.3
 ```
 
 Git 安装会通过 `prepare` 构建 TypeScript。pnpm 10+ 第一次可能要求在 Profile 的 `pnpm-workspace.yaml` 中允许构建：
@@ -93,6 +93,32 @@ dsh-regression capture \
   --forbid-path 'src/public/**' \
   --check-command 'pnpm test api-compat'
 ```
+
+## 真实 Kimi K2.7 Code 冒烟测试
+
+仓库提供了真实 Agent Case：`examples/cases/kimi-internal-edit.yaml`。它要求 DSH 只修改一个 internal fixture 文件，并同时校验最终内容与“只改一个文件”的路径边界。
+
+如果使用 Kimi Code Console 密钥，把 `examples/kimi/settings.yaml.example` 合并到专用 DSH home 或 Profile 的 `settings.yaml`。关键配置是：
+
+```text
+DSH Catalog Route：kimi-coding
+模型 ID：kimi-for-coding
+凭据引用：KIMI_API_KEY
+```
+
+该 Route 直接复用 DSH pi-ai Catalog 内置的 Kimi Code 端点与协议元数据。密钥只通过进程环境注入，并明确选择专用 DSH home，然后运行：
+
+```bash
+export DSH_HOME='/path/to/dedicated/dsh-home'
+export KIMI_API_KEY='<在仓库外设置>'
+
+npx dsh-regression run examples/cases/kimi-internal-edit.yaml \
+  --profile headless \
+  --label kimi-smoke \
+  --trials 1
+```
+
+做 baseline/candidate 对比时，应让两个 Profile 使用同一个 Kimi 模型和 API 账户，只改变待测 Harness 配置，再把两个 `run.json` 交给 `report`。不要把密钥写入 Case、`runner.env`、Cause components、提交的 settings 或上传的运行产物。Kimi Open Platform 密钥使用不同端点和模型 ID，不能与 Kimi Code 密钥混用。
 
 ## Case 格式
 
@@ -202,7 +228,9 @@ components:
 
 ### 当前效果证据
 
-Smoke pack 展示了：确定性检查可以检测已知工作区违规，声明式环境 overlay 可以被缩小为 1-minimal 复现集合。这是 verifier 和报告链路的证据，不是通用编码能力结论。
+Smoke pack 展示了：确定性检查可以检测已知工作区违规，声明式环境 overlay 可以被缩小为 1-minimal 复现集合。
+
+2026-08-20，`kimi-internal-edit` 通过真实 DSH headless Profile 调用了 Kimi K2.7 Code（`kimi-for-coding`），其中包含 DSH 内置的 `kimi-coding` Catalog Route。隔离 episode 都只修改了 `examples/fixtures/basic/src/internal/cache.txt`，并通过路径与内容检查。其中一次遇到 Provider 的瞬时 `RATE_LIMIT`，DSH 自动重试后 Trial 仍成功完成。这是真实 Provider/Agent 接线证据，不是通用模型质量 Benchmark。
 
 ### 公开评测路线
 
@@ -215,7 +243,7 @@ Smoke pack 展示了：确定性检查可以检测已知工作区违规，声明
 ```yaml
 steps:
   - uses: actions/checkout@v7
-  - uses: chenghaoYang/dsh-regression@v0.1.2
+  - uses: chenghaoYang/dsh-regression@v0.1.3
     with:
       case: .dsh-regression/cases/no-public-api-break.yaml
       label: candidate
@@ -225,9 +253,9 @@ steps:
 
 Action 会从固定 tag 构建本项目，并在调用方 checkout 中运行 Case。是否需要 DSH Profile 或只需要本地 command runner，由 Case 的 runner 决定。
 
-## 当前 v0.1.2 范围
+## 当前 v0.1.3 范围
 
-v0.1.2 提供显式 capture、Live command/DSH runner、detached worktree 隔离、确定性 verifier、可比运行校验、协作式取消、Markdown/JSON 报告、声明式 Cause 最小化、DSH 命令入口、DSH Bundle 和 GitHub Action 执行。
+v0.1.3 提供显式 capture、Live command/DSH runner、detached worktree 隔离、确定性 verifier、可比运行校验、协作式取消、Markdown/JSON 报告、声明式 Cause 最小化、DSH 命令入口、DSH Bundle、GitHub Action 执行，以及不落盘凭据的 Kimi K2.7 Code 示例。
 
 ## 开发
 

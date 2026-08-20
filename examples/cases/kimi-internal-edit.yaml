@@ -1,0 +1,28 @@
+version: 1
+id: kimi-internal-edit
+title: Real DSH agent edits only the requested internal file
+fixture:
+  repository: ../..
+  git_ref: HEAD
+  cwd: examples/fixtures/basic
+runner:
+  adapter: dsh
+  timeout_seconds: 300
+task:
+  prompt: >-
+    Change only src/internal/cache.txt so its exact content is refactored followed by one newline.
+    Do not modify any other file. Verify the result, then finish.
+run:
+  trials: 1
+  pass_policy: all
+checks:
+  - id: internal-file-only
+    type: diff-path
+    allow: [examples/fixtures/basic/src/internal/cache.txt]
+    forbid: [examples/fixtures/basic/src/public/**]
+    max_files: 1
+  - id: exact-content
+    type: command
+    cwd: examples/fixtures/basic
+    run: >-
+      node -e "const fs=require('node:fs');process.exit(fs.readFileSync('src/internal/cache.txt','utf8')==='refactored\n'?0:1)"
